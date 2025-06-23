@@ -11,7 +11,7 @@ from transformers import AutoTokenizer
 from fastapi.middleware.cors import CORSMiddleware
 import joblib
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-import gdown
+from huggingface_hub import hf_hub_download
 # import psutil
 import threading
 import time
@@ -35,10 +35,10 @@ encoder_session = None
 tokenizer = None
 
 # === Constants ===
-ENCODER_PATH = "encoder_quantized.onnx"
 CLASSIFIER_PATH = "classifier.onnx"
 TOKENIZER_PATH = "tokenizer/"
-GDRIVE_ID = "1TomEm8_Nf2jicPSt0dqEWA-X0KvIzmA3"
+HUB_REPO_ID = "panghal/swasthya-encoder"
+HUB_FILENAME = "encoder_quantized.onnx"
 
 # === Load classifier pipeline ===
 scaler, label_encoder, _ = joblib.load("classifier_pipeline_light.pkl")
@@ -53,11 +53,10 @@ def get_encoder():
     global encoder_session, tokenizer
 
     if encoder_session is None:
-        if not os.path.exists(ENCODER_PATH):
-            print("📥 Downloading encoder_quantized.onnx from Google Drive...")
-            gdown.download(id=GDRIVE_ID, output=ENCODER_PATH, quiet=False)
+        print("📥 Downloading encoder_quantized.onnx from Hugging Face...")
+        encoder_path = hf_hub_download(repo_id=HUB_REPO_ID, filename=HUB_FILENAME)
         print("📦 Loading encoder ONNX model...")
-        encoder_session = ort.InferenceSession(ENCODER_PATH)
+        encoder_session = ort.InferenceSession(encoder_path)
 
     if tokenizer is None:
         tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
@@ -107,16 +106,6 @@ async def ask_gpt(query: QueryInput):
         return {"reply": response.choices[0].message.content}
     except Exception as e:
         return {"reply": f"⚠️ GPT error: {str(e)}"}
-
-# === Memory monitor thread ===
-# def log_memory_usage():
-#     process = psutil.Process(os.getpid())
-#     while True:
-#         mem = process.memory_info().rss / (1024 * 1024)
-#         print(f"🧠 Current RAM Usage: {mem:.2f} MB")
-#         time.sleep(10)
-
-# threading.Thread(target=log_memory_usage, daemon=True).start()
 
 # === Health check ===
 @app.get("/")

@@ -46,3 +46,8 @@ encoder_quantized.onnx
 # ======================
 dataset/
 encoder_onnx/
+
+# ======================
+# Hugging Face model repo clone (if exists)
+# ======================s
+swasthya-encoder/

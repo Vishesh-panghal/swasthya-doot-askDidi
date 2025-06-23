@@ -4,7 +4,7 @@ joblib
 sentence-transformers
 scikit-learn
 torch
-gdown
+huggingface_hub
 python-dotenv
 nest-asyncio
 openai
@@ -12,4 +12,3 @@ requests
 onnx
 skl2onnx
 onnxruntime
-psutil
