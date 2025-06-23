@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+joblib
+sentence-transformers
+scikit-learn
+torch
+gdown
+python-dotenv
+nest-asyncio
+openai
+requests
+onnx
+skl2onnx
+onnxruntime

@@ -1,0 +1,49 @@
+# ======================
+# Python Virtual Env & Cache
+# ======================
+bin/
+lib/
+include/
+share/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+
+# ======================
+# Jupyter Notebooks
+# ======================
+.ipynb_checkpoints/
+sentiment_classification.ipynb
+
+# ======================
+# Python Env Metadata
+# ======================
+pyvenv.cfg
+
+# ======================
+# Secrets & Env Files
+# ======================
+.env
+
+# ======================
+# Large or Temporary Model Files
+# ======================
+transformer_query_classifier.pkl
+transformer_query_classifier_cpu.pkl
+encoder.onnx
+encoder_quantized.onnx
+classifier.onnx
+
+# ======================
+# IDE-specific
+# ======================
+.vscode/
+
+# ======================
+# Dataset Folders
+# ======================
+dataset/
+encoder_onnx/
