@@ -23,13 +23,13 @@ app = FastAPI()
 # === CORS ===
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: restrict in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# === Globals (for lazy loading) ===
+# === Globals ===
 encoder_session = None
 tokenizer = None
 
@@ -40,6 +40,7 @@ HUB_REPO_ID = "panghal/swasthya-encoder"
 HUB_FILENAME = "encoder_quantized.onnx"
 
 # === Load classifier pipeline ===
+print("📦 Loading classifier pipeline...")
 scaler, label_encoder, _ = joblib.load("classifier_pipeline_light.pkl")
 classifier_session = ort.InferenceSession(CLASSIFIER_PATH)
 
@@ -47,49 +48,58 @@ classifier_session = ort.InferenceSession(CLASSIFIER_PATH)
 class QueryInput(BaseModel):
     text: str
 
-# === Lazy ONNX encoder loader ===
+# === Lazy encoder loader ===
 def get_encoder():
     global encoder_session, tokenizer
 
     if encoder_session is None:
-        print("📥 Downloading encoder_quantized.onnx from Hugging Face...")
+        print("📥 Downloading encoder from HuggingFace Hub...")
         encoder_path = hf_hub_download(repo_id=HUB_REPO_ID, filename=HUB_FILENAME)
         print("📦 Loading encoder ONNX model...")
         encoder_session = ort.InferenceSession(encoder_path)
 
     if tokenizer is None:
+        print("🧠 Loading tokenizer...")
         tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
 
     return encoder_session, tokenizer
 
-# === Encode text ===
+# === Encode Text ===
 def encode_text(text):
     encoder, tokenizer = get_encoder()
-
+    print("🔤 Tokenizing text...")
     inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True, max_length=128)
     ort_inputs = {
         "input_ids": inputs["input_ids"],
         "attention_mask": inputs["attention_mask"]
     }
 
+    print("🧮 Running encoder ONNX model...")
     outputs = encoder.run(None, ort_inputs)
     token_embeddings = outputs[0]
+    print("📐 Embedding shape:", token_embeddings.shape)
     return scaler.transform(token_embeddings.astype(np.float32))
 
-# === Classifier endpoint ===
+# === Classifier Endpoint ===
 @app.post("/classify")
 def classify_query(query: QueryInput):
     try:
+        print("📝 Received text:", query.text)
         emb = encode_text(query.text)
+        print("🔢 Embedding computed.")
+
         pred = classifier_session.run(None, {"input": emb})[0]
+        print("🔮 Prediction raw output:", pred)
+
         label_idx = int(pred[0])
         label = label_encoder.inverse_transform([label_idx])[0]
-        print(f"🔍 Final ONNX Output: {label}")
+        print("✅ Final classification label:", label)
         return {"label": label}
     except Exception as e:
+        print("❌ Error in classification:", str(e))
         return {"error": str(e)}
 
-# === OpenAI GPT endpoint ===
+# === OpenAI GPT Streaming Endpoint ===
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @app.post("/ask-stream")
@@ -108,14 +118,14 @@ async def ask_gpt_stream(query: QueryInput):
                 content = getattr(chunk.choices[0].delta, "content", None)
                 if content:
                     yield content.encode("utf-8")
-            yield b""  # To gracefully close the stream
+            yield b""  # Clean close
 
         return StreamingResponse(stream(), media_type="text/plain")
-
     except Exception as e:
+        print("❌ Error in GPT stream:", str(e))
         return {"reply": f"⚠️ GPT streaming error: {str(e)}"}
 
-# === Custom OpenAPI schema ===
+# === OpenAPI Schema ===
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -135,6 +145,7 @@ app.openapi = custom_openapi
 def root():
     return {"status": "🟢 API is live and healthy"}
 
-# === Local Run ===
+# === Run on Render / Local ===
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("PORT", 8000)) 
+    uvicorn.run("main:app", host="0.0.0.0", port=port)

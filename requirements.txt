@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 joblib
 sentence-transformers
 scikit-learn
