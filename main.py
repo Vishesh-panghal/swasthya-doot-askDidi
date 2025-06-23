@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from openai import OpenAI
-import nest_asyncio
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -17,7 +16,6 @@ from fastapi.responses import StreamingResponse
 
 # === Init ===
 load_dotenv()
-nest_asyncio.apply()
 app = FastAPI()
 
 # === CORS ===
