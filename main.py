@@ -13,6 +13,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from huggingface_hub import hf_hub_download
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import StreamingResponse
+from transformers import PreTrainedTokenizerFast
 
 # === Init ===
 load_dotenv()
@@ -59,7 +60,7 @@ def get_encoder():
     if tokenizer is None:
         print("🧠 Loading tokenizer...")
         TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "tokenizer")
-        tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
+        tokenizer = PreTrainedTokenizerFast(tokenizer_file=os.path.join(TOKENIZER_PATH, "tokenizer.json"))
 
     return encoder_session, tokenizer
 
