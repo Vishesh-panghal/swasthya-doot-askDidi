@@ -143,6 +143,15 @@ def tokenizer_test():
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/debug-files")
+def list_files():
+    import os
+    files = []
+    for root, dirs, filenames in os.walk("."):
+        for name in filenames:
+            files.append(os.path.join(root, name))
+    return {"files": files}
+
 # === OpenAPI Schema ===
 def custom_openapi():
     if app.openapi_schema:
