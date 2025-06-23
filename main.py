@@ -32,14 +32,14 @@ encoder_session = None
 tokenizer = None
 
 # === Constants ===
-CLASSIFIER_PATH = "classifier.onnx"
-TOKENIZER_PATH = "tokenizer/"
+CLASSIFIER_PATH = os.path.join(os.path.dirname(__file__), "classifier.onnx")
+PIPELINE_PATH = os.path.join(os.path.dirname(__file__), "classifier_pipeline_light.pkl")
 HUB_REPO_ID = "panghal/swasthya-encoder"
 HUB_FILENAME = "encoder_quantized.onnx"
 
 # === Load classifier pipeline ===
 print("📦 Loading classifier pipeline...")
-scaler, label_encoder, _ = joblib.load("classifier_pipeline_light.pkl")
+scaler, label_encoder, _ = joblib.load(PIPELINE_PATH)
 classifier_session = ort.InferenceSession(CLASSIFIER_PATH)
 
 # === Schema ===
@@ -58,6 +58,7 @@ def get_encoder():
 
     if tokenizer is None:
         print("🧠 Loading tokenizer...")
+        TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "tokenizer")
         tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
 
     return encoder_session, tokenizer
