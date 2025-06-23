@@ -125,6 +125,24 @@ async def ask_gpt_stream(query: QueryInput):
         print("❌ Error in GPT stream:", str(e))
         return {"reply": f"⚠️ GPT streaming error: {str(e)}"}
 
+@app.get("/onnx-test")
+def onnx_test():
+    try:
+        sess = ort.InferenceSession(CLASSIFIER_PATH)
+        return {"status": "ONNX model loaded successfully"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/tokenizer-test")
+def tokenizer_test():
+    try:
+        tokenizer_path = os.path.join(os.path.dirname(__file__), "tokenizer")
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        return {"status": "Tokenizer loaded successfully"}
+    except Exception as e:
+        return {"error": str(e)}
+
 # === OpenAPI Schema ===
 def custom_openapi():
     if app.openapi_schema:
