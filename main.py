@@ -35,6 +35,7 @@ tokenizer = None
 # === Constants ===
 CLASSIFIER_PATH = os.path.join(os.path.dirname(__file__), "classifier.onnx")
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), "classifier_pipeline_light.pkl")
+TOKENIZER_PATH = os.path.join(os.path.dirname(__file__), "tokenizer")
 HUB_REPO_ID = "panghal/swasthya-encoder"
 HUB_FILENAME = "encoder_quantized.onnx"
 
@@ -137,7 +138,6 @@ def onnx_test():
 @app.get("/tokenizer-test")
 def tokenizer_test():
     try:
-        tokenizer_path = os.path.join(os.path.dirname(__file__), "tokenizer")
         tokenizer = PreTrainedTokenizerFast(tokenizer_file=os.path.join(TOKENIZER_PATH, "tokenizer.json"))
         return {"status": "Tokenizer loaded successfully"}
     except Exception as e:
