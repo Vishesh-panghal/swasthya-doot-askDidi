@@ -138,7 +138,7 @@ def onnx_test():
 def tokenizer_test():
     try:
         tokenizer_path = os.path.join(os.path.dirname(__file__), "tokenizer")
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        tokenizer = PreTrainedTokenizerFast(tokenizer_file=os.path.join(TOKENIZER_PATH, "tokenizer.json"))
         return {"status": "Tokenizer loaded successfully"}
     except Exception as e:
         return {"error": str(e)}
