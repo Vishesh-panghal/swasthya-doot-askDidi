@@ -12,9 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import joblib
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from huggingface_hub import hf_hub_download
-# import psutil
-import threading
-import time
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import StreamingResponse
 
 # === Init ===
 load_dotenv()
@@ -93,25 +92,49 @@ def classify_query(query: QueryInput):
 # === OpenAI GPT endpoint ===
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-@app.post("/ask")
-async def ask_gpt(query: QueryInput):
+@app.post("/ask-stream")
+async def ask_gpt_stream(query: QueryInput):
     try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful healthcare assistant of asha or anm that replies in Hindi."},
-                {"role": "user", "content": query.text},
-            ],
-        )
-        return {"reply": response.choices[0].message.content}
-    except Exception as e:
-        return {"reply": f"⚠️ GPT error: {str(e)}"}
+        def stream():
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful healthcare assistant of ASHA or ANM that replies in Hindi."},
+                    {"role": "user", "content": query.text},
+                ],
+                stream=True,
+            )
+            for chunk in response:
+                content = getattr(chunk.choices[0].delta, "content", None)
+                if content:
+                    yield content.encode("utf-8")
+            yield b""  # To gracefully close the stream
 
-# === Health check ===
-@app.get("/")
+        return StreamingResponse(stream(), media_type="text/plain")
+
+    except Exception as e:
+        return {"reply": f"⚠️ GPT streaming error: {str(e)}"}
+
+# === Custom OpenAPI schema ===
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="Swasthya Doot API",
+        version="1.0",
+        description="API for classifying Hindi queries and chatting with GPT in Hindi for ASHA/ANM support.",
+        routes=app.routes,
+    )
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+# === Health Check ===
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"status": "🟢 API is live and healthy"}
 
-# === Local run ===
+# === Local Run ===
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
