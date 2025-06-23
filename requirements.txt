@@ -12,3 +12,4 @@ requests
 onnx
 skl2onnx
 onnxruntime
+psutil

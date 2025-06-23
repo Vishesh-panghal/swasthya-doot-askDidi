@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import joblib
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import gdown
-import psutil
+# import psutil
 import threading
 import time
 
