@@ -3,7 +3,7 @@ uvicorn[standard]
 joblib
 scikit-learn
 transformers  # instead of sentence-transformers
-torch==2.1.0+cpu --index-url https://download.pytorch.org/whl/cpu
+torch
 huggingface_hub
 python-dotenv
 openai
@@ -11,3 +11,9 @@ requests
 onnx
 skl2onnx
 onnxruntime
+# Data Science & Intelligent Layer
+pandas==2.2.0
+scikit-learn
+statsmodels==0.14.1
+networkx==3.2.1
+firebase-admin==6.4.0

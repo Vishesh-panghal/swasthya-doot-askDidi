@@ -1,10 +1,14 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Security, status, Header
+from pydantic import BaseModel, Field
 from openai import OpenAI
 import uvicorn
 import os
 from dotenv import load_dotenv
-import onnxruntime as ort
+try:
+    import onnxruntime as ort
+except ImportError:
+    print("⚠️ ONNX Runtime not found. Classifier features will be disabled.")
+    ort = None
 import numpy as np
 from transformers import AutoTokenizer
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,21 +16,50 @@ import joblib
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from huggingface_hub import hf_hub_download
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from transformers import PreTrainedTokenizerFast
+from typing import Optional, List
+
+# === Imports for ABDM ===
+# Try/Except to avoid breaking the app if routes are missing during dev
+try:
+    from routes.abdm_routes import router as abdm_router
+except ImportError as e:
+    print(f"⚠️ ABDM Routes Import Failed: {e}")
+    abdm_router = None
 
 # === Init ===
 load_dotenv()
 app = FastAPI()
 
+# === ABDM Router Registration ===
+if abdm_router:
+    app.include_router(abdm_router)
+
+# === Config ===
+API_KEY = os.getenv("API_KEY")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
+if not API_KEY:
+    print("⚠️ WARNING: API_KEY not set in .env. API is unsecured!")
+
 # === CORS ===
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# === Security ===
+async def verify_api_key(x_api_key: str = Header(...)):
+    if x_api_key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API Key",
+        )
+    return x_api_key
 
 # === Globals ===
 encoder_session = None
@@ -40,19 +73,28 @@ HUB_REPO_ID = "panghal/swasthya-encoder"
 HUB_FILENAME = "encoder_quantized.onnx"
 
 # === Load classifier pipeline ===
-print("📦 Loading classifier pipeline...")
-scaler, label_encoder, _ = joblib.load(PIPELINE_PATH)
-classifier_session = ort.InferenceSession(CLASSIFIER_PATH)
+try:
+    if ort:
+        print("📦 Loading classifier pipeline...")
+        scaler, label_encoder, _ = joblib.load(PIPELINE_PATH)
+        classifier_session = ort.InferenceSession(CLASSIFIER_PATH)
+    else:
+        raise ImportError("ONNX Runtime missing")
+except Exception as e:
+    print(f"⚠️ Classifier Load Warning: {e}")
+    scaler = None
+    label_encoder = None
+    classifier_session = None
 
 # === Schema ===
 class QueryInput(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1, max_length=1000)
 
 # === Lazy encoder loader ===
 def get_encoder():
     global encoder_session, tokenizer
 
-    if encoder_session is None:
+    if encoder_session is None and ort:
         print("📥 Downloading encoder from HuggingFace Hub...")
         encoder_path = hf_hub_download(repo_id=HUB_REPO_ID, filename=HUB_FILENAME)
         print("📦 Loading encoder ONNX model...")
@@ -68,42 +110,44 @@ def get_encoder():
 # === Encode Text ===
 def encode_text(text):
     encoder, tokenizer = get_encoder()
-    print("🔤 Tokenizing text...")
+    if not encoder:
+        return None
     inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True, max_length=128)
     ort_inputs = {
         "input_ids": inputs["input_ids"],
         "attention_mask": inputs["attention_mask"]
     }
 
-    print("🧮 Running encoder ONNX model...")
     outputs = encoder.run(None, ort_inputs)
     token_embeddings = outputs[0]
-    print("📐 Embedding shape:", token_embeddings.shape)
     return scaler.transform(token_embeddings.astype(np.float32))
 
 # === Classifier Endpoint ===
-@app.post("/classify")
+@app.post("/classify", dependencies=[Security(verify_api_key)])
 def classify_query(query: QueryInput):
     try:
-        print("📝 Received text:", query.text)
+        if classifier_session is None:
+             return {"label": "Unknown (Model not loaded)"}
         emb = encode_text(query.text)
-        print("🔢 Embedding computed.")
+        if emb is None:
+             return {"label": "Unknown (Encoder error)"}
 
         pred = classifier_session.run(None, {"input": emb})[0]
-        print("🔮 Prediction raw output:", pred)
 
         label_idx = int(pred[0])
         label = label_encoder.inverse_transform([label_idx])[0]
-        print("✅ Final classification label:", label)
         return {"label": label}
     except Exception as e:
         print("❌ Error in classification:", str(e))
-        return {"error": str(e)}
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": "Internal Server Error"}
+        )
 
 # === OpenAI GPT Streaming Endpoint ===
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-@app.post("/ask-stream")
+@app.post("/ask-stream", dependencies=[Security(verify_api_key)])
 async def ask_gpt_stream(query: QueryInput):
     try:
         def stream():
@@ -126,16 +170,18 @@ async def ask_gpt_stream(query: QueryInput):
         print("❌ Error in GPT stream:", str(e))
         return {"reply": f"⚠️ GPT streaming error: {str(e)}"}
 
-@app.get("/onnx-test")
+@app.get("/onnx-test", dependencies=[Security(verify_api_key)])
 def onnx_test():
     try:
-        sess = ort.InferenceSession(CLASSIFIER_PATH)
-        return {"status": "ONNX model loaded successfully"}
+        if ort:
+            sess = ort.InferenceSession(CLASSIFIER_PATH)
+            return {"status": "ONNX model loaded successfully"}
+        return {"status": "ONNX Runtime not available"}
     except Exception as e:
         return {"error": str(e)}
 
 
-@app.get("/tokenizer-test")
+@app.get("/tokenizer-test", dependencies=[Security(verify_api_key)])
 def tokenizer_test():
     try:
         tokenizer = PreTrainedTokenizerFast(tokenizer_file=os.path.join(TOKENIZER_PATH, "tokenizer.json"))
@@ -143,14 +189,7 @@ def tokenizer_test():
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/debug-files")
-def list_files():
-    import os
-    files = []
-    for root, dirs, filenames in os.walk("."):
-        for name in filenames:
-            files.append(os.path.join(root, name))
-    return {"files": files}
+
 
 # === OpenAPI Schema ===
 def custom_openapi():
